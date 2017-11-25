@@ -1,0 +1,161 @@
+<script type='text/javascript'>
+    let devices = {}
+
+    function getCloudNodeId(context) {
+      return context.cloud || $('#node-input-cloud').val()
+    }
+
+    function optionForDevice(device, context) {
+      const selected = (device.alias == context.device) ? 'selected' : '';
+      return `<option value='${device.alias}' ${selected}>${device.alias}</option>`
+    }
+
+    function updateDeviceType() {
+      let device = devices[$('#node-input-device').val()]
+      if (device) {
+        $('#node-input-deviceType').val(device.deviceType)
+      }
+    }
+
+    function showDeviceText(text) {
+      $('#node-input-device').html(`<option>${text}</option>`)
+      $('#node-input-device').attr('disabled', 'disabled')
+    }
+
+    function fetchDevices(cloud, context, credentials) {
+      let data = {
+        cloud: cloud,
+        credentials,
+      }
+      showDeviceText('Loading...')
+
+      $.post('tplink-cloud/devices', data, (fetchedDevices) => {
+        if (fetchedDevices.error) {
+          showDeviceText(fetchedDevices.error)
+          return;
+        }
+
+        devices = {}
+        fetchedDevices.forEach((device) => {
+          devices[device.alias] = device
+        })
+
+        if (fetchedDevices.length > 0){
+          let html = fetchedDevices
+                .map(device => optionForDevice(device, context))
+                .reduce((a, b) => a + b)
+          $('#node-input-device').html(html);
+          $('#node-input-device').removeAttr('disabled')
+          updateDeviceType()
+        }
+      }, 'json')
+    }
+    RED.nodes.registerType('tplink-cloud-device',{
+        category: 'function',
+        color: '#e2d96e',
+        defaults: {
+            name: {value:''},
+            cloud: {type:'tplink-cloud', required:true},
+            device: {required:true},
+            deviceType: {value: ''}
+        },
+        inputs:1,
+        outputs:1,
+        icon: 'white-globe.png',
+        label: function() {
+            return this.name || 'TPLink Cloud Device';
+        },
+        oneditprepare: function() {
+          window.me = this;
+          $('#devices-reload').click(() => {
+            fetchDevices(getCloudNodeId(this), this);
+          })
+
+          $('#node-input-device').select(() => {
+            updateDeviceType()
+          });
+
+          if (this.device) {
+            let html = optionForDevice({alias: this.device}, this)
+            $('#node-input-device').html(defaultOption)
+          } else {
+            let cloudNodeId = getCloudNodeId(this)
+            fetchDevices(cloudNodeId, this);
+          }
+        },
+        oneditsave: function() {
+          if ($('#node-input-device').attr('disabled')) {
+            this.device = undefined
+          }
+          //debugger
+        }
+    });
+</script>
+
+<script type='text/x-red' data-template-name='tplink-cloud-device'>
+    <div class='form-row'>
+        <label for='node-input-name'><i class='icon-tag'></i> Name</label>
+        <input type='text' id='node-input-name' placeholder='Name'>
+    </div>
+    <div class='form-row'>
+        <label for='node-input-cloud'><i class='fa fa-globe'></i><span>TPLink Cloud</span></label>
+        <input type='text' id='node-input-cloud'>
+    </div>
+    <div class='form-row'>
+        <label for='node-input-device'><i class='fa fa-globe'></i><span>Device</span></label>
+        <select type='text' id='node-input-device' style='display: inline-block; vertical-align: middle; width:60%;'>
+        </select>
+        <button id='devices-reload'>reload</button>
+    </div>
+    <div class='form-row'>
+        <label for='node-input-deviceType'><i class='fa fa-globe'></i><span>Type</span></label>
+        <input type='text' id='node-input-deviceType' disabled='disabled' />
+    </div>
+</script>
+
+<script type='text/x-red' data-help-name='tplink-cloud-device'>
+    <p>Enter your tplink credentials and select the device you want to control.</p>
+</script>
+
+<script type='text/x-red' data-template-name='tplink-cloud'>
+    <div class='form-row'>
+        <label for='node-config-input-name'><i class='fa fa-tag'></i> <span data-i18n='common.label.name'></span></label>
+        <input type='text' id='node-config-input-name' data-i18n='[placeholder]common.label.name'>
+    </div>
+    <div class='form-row'>
+        <ul style='background: #fff; min-width: 600px; margin-bottom: 20px;' id='node-config-mqtt-broker-tabs'></ul>
+    </div>
+    <div class='form-row'>
+        <label for='node-config-input-user'><i class='fa fa-user'></i><span data-i18n='common.label.username'></span></label>
+        <input type='text' id='node-config-input-user'>
+    </div>
+    <div class='form-row'>
+        <label for='node-config-input-password'><i class='fa fa-lock'></i> <span data-i18n='common.label.password'></span></label>
+        <input type='password' id='node-config-input-password'>
+    </div>
+</script>
+
+<script type='text/x-red' data-help-name='tplink-cloud'>
+    <p>The credentials for your TPLink cloud account.</p>
+</script>
+
+<script type='text/javascript'>
+    RED.nodes.registerType('tplink-cloud',{
+        category: 'config',
+        defaults: {
+            name: {value:''},
+        },
+        credentials: {
+            user: {type:'text', required: true},
+            password: {type: 'password', required: true}
+        },
+        label: function() {
+            return this.name;
+        },
+        oneditsave: function() {
+          if(this.credentials) {
+            setTimeout(() => fetchDevices(this.id, {}, this.credentials), 0);
+          }
+        }
+    });
+</script>
